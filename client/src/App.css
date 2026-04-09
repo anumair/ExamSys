@@ -1,0 +1,150 @@
+.App {
+  min-height: 100vh;
+  background: #f5f7fb;
+  color: #0f172a;
+}
+
+.page {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+.nav {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.nav-link {
+  text-decoration: none;
+  color: #1e3a8a;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #e0e7ff;
+}
+
+.nav-link:hover {
+  background: #c7d2fe;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.page-subtitle {
+  margin: 0 0 24px;
+  color: #475569;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+}
+
+.card + .card {
+  margin-top: 16px;
+}
+
+.tabs {
+  display: inline-flex;
+  background: #e2e8f0;
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 24px;
+}
+
+.tab {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #334155;
+}
+
+.tab.active {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.field label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #cbd5f5;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.field input[type="file"] {
+  padding: 8px;
+  background: #f8fafc;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.btn {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn.secondary {
+  background: #0f172a;
+}
+
+.status {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  border: 1px solid #bfdbfe;
+}
+
+.status.error {
+  background: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.divider {
+  margin: 24px 0;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.helper {
+  color: #64748b;
+  font-size: 13px;
+  margin-top: 6px;
+}

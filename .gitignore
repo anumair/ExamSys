@@ -1,0 +1,11 @@
+node_modules/
+client/node_modules/
+server/node_modules/
+*.log
+.DS_Store
+.env
+server/.env
+client/.env
+server/keys/
+server/uploads/
+server/packages/
