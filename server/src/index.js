@@ -139,12 +139,15 @@ app.get("/api/admin/exams/history", async (req, res) => {
 
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, public_key } = req.body;
     if (!name || !email || !password || !role) {
       return res.status(400).json({ error: "name, email, password, role required" });
     }
     if (!["admin", "student"].includes(role)) {
       return res.status(400).json({ error: "Invalid role" });
+    }
+    if (role === "student" && !public_key) {
+      return res.status(400).json({ error: "public_key required for student" });
     }
 
     const existing = await User.findOne({ email: email.toLowerCase() });
@@ -153,7 +156,7 @@ app.post("/api/auth/signup", async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ name, email, password_hash, role });
+    const user = await User.create({ name, email, password_hash, role, public_key });
 
     const token = jwt.sign({ sub: user._id, role: user.role }, jwtSecret, {
       expiresIn: "7d",
@@ -212,12 +215,12 @@ app.post(
   ]),
   async (req, res) => {
     try {
-      const { exam_id, exam_time } = req.body;
+      const { exam_id, exam_time, paper_text } = req.body;
       const uploadedFile = req.files?.file?.[0] || req.files?.paper?.[0];
 
-      if (!exam_id || !exam_time || !uploadedFile) {
+      if (!exam_id || !exam_time || (!uploadedFile && !paper_text)) {
         return res.status(400).json({
-          error: "exam_id, exam_time, and file are required",
+          error: "exam_id, exam_time, and paper file or text are required",
         });
       }
 
@@ -243,7 +246,10 @@ app.post(
       const kn = evolveKey(k0, n);
       const encKey = deriveEncKey(kn);
 
-      const paperBuffer = await fs.promises.readFile(uploadedFile.path);
+      const paperBuffer = uploadedFile
+        ? await fs.promises.readFile(uploadedFile.path)
+        : Buffer.from(paper_text, "utf8");
+      const content_type = paper_text ? "text" : "file";
       const nonce = crypto.randomBytes(12);
       const cipher = crypto.createCipheriv("aes-256-gcm", encKey, nonce);
 
@@ -264,6 +270,7 @@ app.post(
         tag: tag.toString("base64"),
         aad: aad.toString("base64"),
         version: 1,
+        content_type,
       };
 
       const signature = crypto

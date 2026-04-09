@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const EPOCH_TIME = process.env.REACT_APP_EPOCH_TIME || "2025-01-01T00:00:00Z";
 const STEP_SIZE_SECONDS = Number(process.env.REACT_APP_STEP_SIZE_SECONDS || "300");
@@ -58,14 +58,82 @@ const deriveEncKey = async (knBytes) => {
   return crypto.subtle.importKey("raw", encBits, "AES-GCM", false, ["decrypt"]);
 };
 
+const parseQuestions = (text) => {
+  const blocks = [];
+  const regex = /(?:^|\n)\s*(\d+)\.\s*([\s\S]*?)(?=(?:\n\s*\d+\.|$))/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const id = Number(match[1]);
+    const body = match[2].replace(/\s+/g, " ").trim();
+    const parts = body.split(/\s*[A-D]\)\s*/).filter(Boolean);
+    if (parts.length < 2) {
+      continue;
+    }
+    const question = parts[0].trim();
+    const options = parts.slice(1).map((option) => option.trim());
+    if (!question || options.length < 2) {
+      continue;
+    }
+    blocks.push({ id, question, options });
+  }
+  return blocks;
+};
+
+const formatTime = (value) => {
+  const minutes = Math.floor(value / 60);
+  const seconds = value % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
+
 function StudentPage() {
   const [studentExamId, setStudentExamId] = useState("");
   const [studentStatus, setStudentStatus] = useState("");
   const [studentError, setStudentError] = useState(false);
   const [paperText, setPaperText] = useState("");
   const [paperUrl, setPaperUrl] = useState("");
+  const [questions, setQuestions] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [timeLeft, setTimeLeft] = useState(60);
+  const [globalTimeLeft, setGlobalTimeLeft] = useState(0);
+  const [quizActive, setQuizActive] = useState(false);
+  const [quizFinished, setQuizFinished] = useState(false);
 
   const epochMs = useMemo(() => new Date(EPOCH_TIME).getTime(), []);
+
+  const advanceQuestion = () => {
+    setCurrentIndex((index) => {
+      const next = index + 1;
+      if (next >= questions.length) {
+        setQuizActive(false);
+        setQuizFinished(true);
+        return index;
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!quizActive) {
+      return undefined;
+    }
+    if (globalTimeLeft <= 0) {
+      setQuizActive(false);
+      setQuizFinished(true);
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      setGlobalTimeLeft((value) => Math.max(0, value - 1));
+      setTimeLeft((value) => {
+        if (value <= 1) {
+          advanceQuestion();
+          return 60;
+        }
+        return value - 1;
+      });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [quizActive, timeLeft, globalTimeLeft, questions.length]);
 
   const handlePackageProcess = async (event) => {
     event.preventDefault();
@@ -73,6 +141,10 @@ function StudentPage() {
     setStudentError(false);
     setPaperText("");
     setPaperUrl("");
+    setQuestions([]);
+    setAnswers({});
+    setQuizActive(false);
+    setQuizFinished(false);
 
     if (!studentExamId.trim()) {
       setStudentStatus("Please enter Exam ID.");
@@ -107,6 +179,7 @@ function StudentPage() {
         signature,
         public_key,
         version,
+        content_type,
       } = parsed;
 
       const payload = {
@@ -118,6 +191,7 @@ function StudentPage() {
         tag,
         aad,
         version,
+        ...(content_type ? { content_type } : {}),
       };
 
       const payloadBytes = new TextEncoder().encode(JSON.stringify(payload));
@@ -191,7 +265,22 @@ function StudentPage() {
         plainBytes[2] === 0x44 &&
         plainBytes[3] === 0x46;
 
-      if (isPdf) {
+      if (content_type === "text") {
+        const text = new TextDecoder().decode(plainBytes);
+        const parsedQuestions = parseQuestions(text);
+        if (parsedQuestions.length === 0) {
+          setStudentStatus("No questions found in the decrypted text.");
+          setStudentError(true);
+          return;
+        }
+        setQuestions(parsedQuestions);
+        setCurrentIndex(0);
+        setTimeLeft(60);
+        setGlobalTimeLeft(parsedQuestions.length * 60);
+        setQuizActive(true);
+        setQuizFinished(false);
+        setStudentStatus("Quiz started.");
+      } else if (isPdf) {
         const blob = new Blob([plainBytes], { type: "application/pdf" });
         const url = URL.createObjectURL(blob);
         setPaperUrl(url);
@@ -257,9 +346,65 @@ function StudentPage() {
           />
         </div>
       )}
-      {paperText && (
+      {paperText && !quizActive && (
         <div className="card" style={{ marginTop: 16 }}>
           <textarea readOnly value={paperText} style={{ width: "100%", minHeight: 300 }} />
+        </div>
+      )}
+      {(quizActive || quizFinished) && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div className="quiz-meta">
+            <div>
+              Question {Math.min(currentIndex + 1, questions.length)} / {questions.length}
+            </div>
+            <div>Answered: {Object.keys(answers).length}</div>
+            <div>Global time: {formatTime(globalTimeLeft)}</div>
+            <div>Question time: {formatTime(timeLeft)}</div>
+          </div>
+          {quizFinished ? (
+            <div className="status">
+              Quiz ended. You answered {Object.keys(answers).length} out of{" "}
+              {questions.length} questions.
+            </div>
+          ) : (
+            questions[currentIndex] && (
+              <div>
+                <div className="quiz-question">
+                  {questions[currentIndex].id}. {questions[currentIndex].question}
+                </div>
+                <div className="option-list">
+                  {questions[currentIndex].options.map((option, index) => (
+                    <label key={option} className="option-item">
+                      <input
+                        type="radio"
+                        name={`question-${questions[currentIndex].id}`}
+                        checked={answers[questions[currentIndex].id] === index}
+                        onChange={() =>
+                          setAnswers((prev) => ({
+                            ...prev,
+                            [questions[currentIndex].id]: index,
+                          }))
+                        }
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn secondary"
+                    onClick={() => {
+                      advanceQuestion();
+                      setTimeLeft(60);
+                    }}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )
+          )}
         </div>
       )}
     </div>

@@ -10,6 +10,7 @@ const examPackageSchema = new mongoose.Schema(
     tag: { type: String, required: true },
     aad: { type: String, required: true },
     version: { type: Number, required: true },
+    content_type: { type: String, enum: ["text", "file"], required: true },
     signature: { type: String, required: true },
     public_key: { type: String, required: true },
   },

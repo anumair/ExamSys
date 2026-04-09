@@ -4,6 +4,7 @@ function AdminPage() {
   const [examId, setExamId] = useState("");
   const [examTime, setExamTime] = useState("");
   const [file, setFile] = useState(null);
+  const [paperText, setPaperText] = useState("");
   const [adminStatus, setAdminStatus] = useState("");
   const [adminError, setAdminError] = useState(false);
   const [history, setHistory] = useState([]);
@@ -39,6 +40,9 @@ function AdminPage() {
     if (file) {
       formData.append("file", file);
     }
+    if (paperText.trim()) {
+      formData.append("paper_text", paperText.trim());
+    }
 
     try {
       const response = await fetch("/api/admin/exams", {
@@ -61,6 +65,7 @@ function AdminPage() {
       setExamId("");
       setExamTime("");
       setFile(null);
+      setPaperText("");
       loadHistory();
     } catch (error) {
       setAdminStatus(error.message);
@@ -109,9 +114,26 @@ function AdminPage() {
               type="file"
               accept=".pdf,.txt,application/pdf,text/plain"
               onChange={(event) => setFile(event.target.files?.[0] || null)}
-              required
             />
             <div className="helper">PDF preferred for final exams.</div>
+          </div>
+          <div className="field">
+            <label htmlFor="paperText">Or paste paper text</label>
+            <textarea
+              id="paperText"
+              value={paperText}
+              onChange={(event) => setPaperText(event.target.value)}
+              placeholder="Paste questions or text here"
+              rows={6}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #cbd5f5",
+                borderRadius: 10,
+                fontSize: 14,
+              }}
+            />
+            <div className="helper">If text is provided, upload is optional.</div>
           </div>
           <div className="actions">
             <button type="submit" className="btn">
@@ -124,6 +146,7 @@ function AdminPage() {
                 setExamId("");
                 setExamTime("");
                 setFile(null);
+                setPaperText("");
                 setAdminStatus("");
                 setAdminError(false);
               }}

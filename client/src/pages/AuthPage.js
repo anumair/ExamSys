@@ -1,6 +1,33 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+const bufferToBase64 = (buffer) => {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+};
+
+const generateStudentKeys = async () => {
+  if (!window.crypto?.subtle) {
+    throw new Error("WebCrypto is not available in this browser.");
+  }
+  const keyPair = await window.crypto.subtle.generateKey(
+    { name: "Ed25519" },
+    true,
+    ["sign", "verify"]
+  );
+  const publicKey = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
+  const privateKey = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+  const publicKeyBase64 = bufferToBase64(publicKey);
+  const privateKeyBase64 = bufferToBase64(privateKey);
+  localStorage.setItem("student_private_key", privateKeyBase64);
+  localStorage.setItem("student_public_key", publicKeyBase64);
+  return publicKeyBase64;
+};
+
 function AuthPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState("login");
@@ -16,12 +43,17 @@ function AuthPage() {
     setStatus("Submitting...");
     setIsError(false);
     try {
+      let publicKey = null;
+      if (endpoint === "signup" && role === "student") {
+        publicKey = await generateStudentKeys();
+      }
+
       const response = await fetch(`/api/auth/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           endpoint === "signup"
-            ? { name, email, password, role }
+            ? { name, email, password, role, public_key: publicKey }
             : { email, password }
         ),
       });
