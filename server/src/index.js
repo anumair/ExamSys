@@ -12,6 +12,8 @@ const User = require("./models/User");
 const ExamPackage = require("./models/ExamPackage");
 const DecryptLog = require("./models/DecryptLog");
 const AnswerSubmission = require("./models/AnswerSubmission");
+const AnswerKey = require("./models/AnswerKey");
+const ExamResult = require("./models/ExamResult");
 const ActionLog = require("./models/ActionLog");
 
 dotenv.config();
@@ -120,6 +122,27 @@ const normalizeAnswers = (value) => {
   return normalized;
 };
 
+const canonicalizePayload = (payload) => {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const { exam_id, student_id, timestamp, answers } = payload;
+  if (!exam_id || !student_id || !timestamp || !answers) {
+    return null;
+  }
+  const normalizedAnswers = normalizeAnswers(answers);
+  if (!normalizedAnswers) {
+    return null;
+  }
+  const canonical = {
+    exam_id,
+    student_id,
+    answers: normalizedAnswers,
+    timestamp,
+  };
+  return { canonical, message: JSON.stringify(canonical) };
+};
+
 const gradeSubmission = (answers, correctAnswers) => {
   const normalizedAnswers = normalizeAnswers(answers) || {};
   const normalizedCorrect = normalizeAnswers(correctAnswers) || {};
@@ -198,9 +221,9 @@ app.post("/api/student/submit-answers", authenticate, async (req, res) => {
     if (req.user?.role !== "student") {
       return res.status(403).json({ error: "Student access required" });
     }
-    const { exam_id, answers, signature } = req.body;
-    if (!exam_id || !answers || !signature) {
-      return res.status(400).json({ error: "exam_id, answers, signature required" });
+    const { payload, signature } = req.body;
+    if (!payload || !signature) {
+      return res.status(400).json({ error: "payload and signature required" });
     }
 
     const student = await User.findById(req.user.sub).select("public_key");
@@ -208,12 +231,20 @@ app.post("/api/student/submit-answers", authenticate, async (req, res) => {
       return res.status(400).json({ error: "Student public key not found" });
     }
 
-    const normalizedAnswers = normalizeAnswers(answers);
-    if (!normalizedAnswers) {
-      return res.status(400).json({ error: "Invalid answers payload" });
+    if (payload.student_id !== String(req.user.sub)) {
+      return res.status(403).json({ error: "student_id mismatch" });
+    }
+    const parsedTimestamp = new Date(payload.timestamp);
+    if (Number.isNaN(parsedTimestamp.getTime())) {
+      return res.status(400).json({ error: "Invalid timestamp" });
     }
 
-    const message = JSON.stringify(normalizedAnswers);
+    const canonicalized = canonicalizePayload(payload);
+    if (!canonicalized) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+    const { canonical, message } = canonicalized;
+
     const publicKey = crypto.createPublicKey({
       key: Buffer.from(student.public_key, "base64"),
       format: "der",
@@ -231,18 +262,20 @@ app.post("/api/student/submit-answers", authenticate, async (req, res) => {
     }
 
     const submission = await AnswerSubmission.create({
-      exam_id,
+      exam_id: canonical.exam_id,
       student: student._id,
-      answers: normalizedAnswers,
+      student_id: canonical.student_id,
+      payload: canonical,
+      answers: canonical.answers,
       signature,
       verified: true,
-      submitted_at: new Date(),
+      submitted_at: parsedTimestamp,
     });
     await logAction({
       action: "answers_submitted",
       actor: student._id,
       actor_role: "student",
-      exam_id,
+      exam_id: canonical.exam_id,
       metadata: { submission_id: submission._id },
     });
 
@@ -274,9 +307,10 @@ app.get("/api/admin/submissions", authenticate, requireAdmin, async (req, res) =
     const response = submissions.map((item) => ({
       _id: item._id,
       exam_id: item.exam_id,
-      student_id: item.student?._id,
+      student_id: item.student_id || item.student?._id,
       student_name: item.student?.name,
       student_email: item.student?.email,
+      payload: item.payload,
       answers: item.answers,
       signature: item.signature,
       submitted_at: item.submitted_at || item.createdAt,
@@ -300,28 +334,81 @@ app.post("/api/admin/results/announce", authenticate, requireAdmin, async (req, 
       return res.status(400).json({ error: "Invalid correct_answers payload" });
     }
 
+    await AnswerKey.findOneAndUpdate(
+      { exam_id },
+      { correct_answers: normalizedCorrect },
+      { upsert: true, new: true }
+    );
+
     const submissions = await AnswerSubmission.find({ exam_id })
       .sort({ submitted_at: -1, createdAt: -1 })
-      .populate("student", "name email")
+      .populate("student", "name email public_key")
       .lean();
 
-    const results = submissions.map((submission) => {
-      const { score, total } = gradeSubmission(
-        submission.answers,
-        normalizedCorrect
-      );
-      return {
+    const results = [];
+    for (const submission of submissions) {
+      let verified = false;
+      let score = 0;
+      let total = Object.keys(normalizedCorrect).length;
+      const studentIdValue =
+        submission.student?._id?.toString() || submission.student_id || "";
+      if (submission.payload && submission.student?.public_key) {
+        const canonicalized = canonicalizePayload(submission.payload);
+        if (canonicalized) {
+          const publicKey = crypto.createPublicKey({
+            key: Buffer.from(submission.student.public_key, "base64"),
+            format: "der",
+            type: "spki",
+          });
+          verified = crypto.verify(
+            null,
+            Buffer.from(canonicalized.message),
+            publicKey,
+            Buffer.from(submission.signature, "base64")
+          );
+          if (verified) {
+            const graded = gradeSubmission(
+              canonicalized.canonical.answers,
+              normalizedCorrect
+            );
+            score = graded.score;
+            total = graded.total;
+          }
+        }
+      }
+
+      const percentage = total ? Math.round((score / total) * 100) : 0;
+      if (submission.student?._id) {
+        await ExamResult.findOneAndUpdate(
+          { exam_id, student: submission.student._id },
+          {
+            exam_id,
+            student: submission.student._id,
+            student_id: studentIdValue,
+            submission: submission._id,
+            score,
+            total,
+            percentage,
+            verified,
+            evaluated_at: new Date(),
+          },
+          { upsert: true, new: true }
+        );
+      }
+
+      results.push({
         submission_id: submission._id,
         exam_id: submission.exam_id,
-        student_id: submission.student?._id,
+        student_id: studentIdValue || submission.student?._id,
         student_name: submission.student?.name,
         student_email: submission.student?.email,
         score,
         total,
-        percentage: total ? Math.round((score / total) * 100) : 0,
+        percentage,
+        verified,
         submitted_at: submission.submitted_at || submission.createdAt,
-      };
-    });
+      });
+    }
 
     await logAction({
       action: "results_announced",
@@ -396,6 +483,7 @@ app.post("/api/auth/signup", async (req, res) => {
     return res.status(201).json({
       token,
       role: user.role,
+      user_id: user._id,
       name: user.name,
       email: user.email,
     });
@@ -435,6 +523,7 @@ app.post("/api/auth/login", async (req, res) => {
     return res.json({
       token,
       role: user.role,
+      user_id: user._id,
       name: user.name,
       email: user.email,
     });

@@ -102,6 +102,23 @@ const normalizeAnswers = (value) => {
   return normalized;
 };
 
+const canonicalizePayload = (payload) => {
+  if (!payload) {
+    return null;
+  }
+  const normalizedAnswers = normalizeAnswers(payload.answers || {});
+  if (!payload.exam_id || !payload.student_id || !payload.timestamp) {
+    return null;
+  }
+  const canonical = {
+    exam_id: payload.exam_id,
+    student_id: payload.student_id,
+    answers: normalizedAnswers,
+    timestamp: payload.timestamp,
+  };
+  return { canonical, message: JSON.stringify(canonical) };
+};
+
 function StudentPage() {
   const [studentExamId, setStudentExamId] = useState("");
   const [studentStatus, setStudentStatus] = useState("");
@@ -345,6 +362,13 @@ function StudentPage() {
       return;
     }
 
+    const studentId = localStorage.getItem("auth_user_id");
+    if (!studentId) {
+      setSubmissionStatus("Student ID missing. Please log in again.");
+      setSubmissionError(true);
+      return;
+    }
+
     const privateKeyBase64 = localStorage.getItem("student_private_key");
     if (!privateKeyBase64) {
       setSubmissionStatus("Private key not found in this browser.");
@@ -355,7 +379,17 @@ function StudentPage() {
     try {
       setSubmitting(true);
       const normalizedAnswers = normalizeAnswers(answers);
-      const message = JSON.stringify(normalizedAnswers);
+      const payload = {
+        exam_id: examIdForQuiz,
+        student_id: studentId,
+        answers: normalizedAnswers,
+        timestamp: new Date().toISOString(),
+      };
+      const canonicalized = canonicalizePayload(payload);
+      if (!canonicalized) {
+        throw new Error("Invalid submission payload.");
+      }
+      const message = canonicalized.message;
       const keyBytes = base64ToBytes(privateKeyBase64);
       const privateKey = await crypto.subtle.importKey(
         "pkcs8",
@@ -378,14 +412,13 @@ function StudentPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          exam_id: examIdForQuiz,
-          answers: normalizedAnswers,
+          payload: canonicalized.canonical,
           signature: signatureBase64,
         }),
       });
-      const payload = await response.json().catch(() => ({}));
+      const responsePayload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(payload.error || "Submission failed");
+        throw new Error(responsePayload.error || "Submission failed");
       }
       setSubmissionStatus("Answers submitted and verified.");
       setSubmissionError(false);

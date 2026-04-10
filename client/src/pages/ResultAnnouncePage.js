@@ -119,6 +119,7 @@ function ResultAnnouncePage() {
                   <th>Exam ID</th>
                   <th>Score</th>
                   <th>Percentage</th>
+                  <th>Verified</th>
                   <th>Submitted</th>
                 </tr>
               </thead>
@@ -134,6 +135,7 @@ function ResultAnnouncePage() {
                       {item.score} / {item.total}
                     </td>
                     <td>{item.percentage}%</td>
+                    <td>{item.verified ? "Yes" : "No"}</td>
                     <td>
                       {item.submitted_at
                         ? new Date(item.submitted_at).toLocaleString()
