@@ -12,6 +12,7 @@ const User = require("./models/User");
 const ExamPackage = require("./models/ExamPackage");
 const DecryptLog = require("./models/DecryptLog");
 const AnswerSubmission = require("./models/AnswerSubmission");
+const ActionLog = require("./models/ActionLog");
 
 dotenv.config();
 
@@ -93,6 +94,20 @@ const requireAdmin = (req, res, next) => {
   return next();
 };
 
+const logAction = async ({ action, actor, actor_role, exam_id, metadata }) => {
+  try {
+    await ActionLog.create({
+      action,
+      actor,
+      actor_role,
+      exam_id,
+      metadata,
+    });
+  } catch (error) {
+    console.error("Failed to write action log", error);
+  }
+};
+
 const normalizeAnswers = (value) => {
   if (!value || typeof value !== "object") {
     return null;
@@ -103,6 +118,19 @@ const normalizeAnswers = (value) => {
     normalized[key] = value[key];
   });
   return normalized;
+};
+
+const gradeSubmission = (answers, correctAnswers) => {
+  const normalizedAnswers = normalizeAnswers(answers) || {};
+  const normalizedCorrect = normalizeAnswers(correctAnswers) || {};
+  const keys = Object.keys(normalizedCorrect);
+  let score = 0;
+  keys.forEach((key) => {
+    if (normalizedAnswers[key] === normalizedCorrect[key]) {
+      score += 1;
+    }
+  });
+  return { score, total: keys.length };
 };
 
 const connectDb = async () => {
@@ -152,6 +180,11 @@ app.post("/api/student/decrypt-log", async (req, res) => {
       exam_id,
       exam_time: examTimeDate,
       decrypted_at: new Date(),
+    });
+    await logAction({
+      action: "exam_decrypted",
+      exam_id,
+      metadata: { exam_time: examTimeDate.toISOString() },
     });
     return res.status(201).json({ success: true, id: log._id });
   } catch (error) {
@@ -205,6 +238,13 @@ app.post("/api/student/submit-answers", authenticate, async (req, res) => {
       verified: true,
       submitted_at: new Date(),
     });
+    await logAction({
+      action: "answers_submitted",
+      actor: student._id,
+      actor_role: "student",
+      exam_id,
+      metadata: { submission_id: submission._id },
+    });
 
     return res.status(201).json({ success: true, verified: true, id: submission._id });
   } catch (error) {
@@ -249,6 +289,79 @@ app.get("/api/admin/submissions", authenticate, requireAdmin, async (req, res) =
   }
 });
 
+app.post("/api/admin/results/announce", authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { exam_id, correct_answers } = req.body;
+    if (!exam_id || !correct_answers) {
+      return res.status(400).json({ error: "exam_id and correct_answers required" });
+    }
+    const normalizedCorrect = normalizeAnswers(correct_answers);
+    if (!normalizedCorrect || Object.keys(normalizedCorrect).length === 0) {
+      return res.status(400).json({ error: "Invalid correct_answers payload" });
+    }
+
+    const submissions = await AnswerSubmission.find({ exam_id })
+      .sort({ submitted_at: -1, createdAt: -1 })
+      .populate("student", "name email")
+      .lean();
+
+    const results = submissions.map((submission) => {
+      const { score, total } = gradeSubmission(
+        submission.answers,
+        normalizedCorrect
+      );
+      return {
+        submission_id: submission._id,
+        exam_id: submission.exam_id,
+        student_id: submission.student?._id,
+        student_name: submission.student?.name,
+        student_email: submission.student?.email,
+        score,
+        total,
+        percentage: total ? Math.round((score / total) * 100) : 0,
+        submitted_at: submission.submitted_at || submission.createdAt,
+      };
+    });
+
+    await logAction({
+      action: "results_announced",
+      actor: req.user?.sub,
+      actor_role: req.user?.role,
+      exam_id,
+      metadata: { submissions: submissions.length, total_questions: Object.keys(normalizedCorrect).length },
+    });
+
+    return res.json({ exam_id, total_questions: Object.keys(normalizedCorrect).length, results });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.get("/api/admin/logs", authenticate, requireAdmin, async (req, res) => {
+  try {
+    const logs = await ActionLog.find()
+      .sort({ createdAt: -1 })
+      .populate("actor", "name email role")
+      .lean();
+    const response = logs.map((item) => ({
+      _id: item._id,
+      action: item.action,
+      actor_id: item.actor?._id,
+      actor_name: item.actor?.name,
+      actor_email: item.actor?.email,
+      actor_role: item.actor?.role || item.actor_role,
+      exam_id: item.exam_id,
+      metadata: item.metadata,
+      created_at: item.createdAt,
+    }));
+    return res.json(response);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const { name, email, password, role, public_key } = req.body;
@@ -269,6 +382,12 @@ app.post("/api/auth/signup", async (req, res) => {
 
     const password_hash = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password_hash, role, public_key });
+    await logAction({
+      action: "signup",
+      actor: user._id,
+      actor_role: user.role,
+      metadata: { email: user.email },
+    });
 
     const token = jwt.sign({ sub: user._id, role: user.role }, jwtSecret, {
       expiresIn: "7d",
@@ -305,6 +424,12 @@ app.post("/api/auth/login", async (req, res) => {
 
     const token = jwt.sign({ sub: user._id, role: user.role }, jwtSecret, {
       expiresIn: "7d",
+    });
+    await logAction({
+      action: "login",
+      actor: user._id,
+      actor_role: user.role,
+      metadata: { email: user.email },
     });
 
     return res.json({
@@ -402,6 +527,13 @@ app.post(
       await ExamPackage.create({
         ...fullPackage,
         exam_time: new Date(examTimeUtc),
+      });
+      await logAction({
+        action: "exam_created",
+        actor: req.user?.sub,
+        actor_role: req.user?.role,
+        exam_id,
+        metadata: { content_type },
       });
 
       return res.json({

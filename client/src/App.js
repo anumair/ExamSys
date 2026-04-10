@@ -2,6 +2,8 @@ import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import "./App.css";
 import AdminPage from "./pages/AdminPage";
 import AuthPage from "./pages/AuthPage";
+import LogsPage from "./pages/LogsPage";
+import ResultAnnouncePage from "./pages/ResultAnnouncePage";
 import StudentPage from "./pages/StudentPage";
 
 const isAuthed = () => {
@@ -36,6 +38,12 @@ function App() {
             <Link className="nav-link" to="/admin">
               Admin
             </Link>
+            <Link className="nav-link" to="/admin/logs">
+              Logs
+            </Link>
+            <Link className="nav-link" to="/admin/results">
+              Results
+            </Link>
             <Link className="nav-link" to="/student">
               Student
             </Link>
@@ -49,6 +57,22 @@ function App() {
               element={
                 <ProtectedRoute role="admin">
                   <AdminPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/logs"
+              element={
+                <ProtectedRoute role="admin">
+                  <LogsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/results"
+              element={
+                <ProtectedRoute role="admin">
+                  <ResultAnnouncePage />
                 </ProtectedRoute>
               }
             />
