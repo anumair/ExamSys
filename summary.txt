@@ -1,0 +1,501 @@
+ExamSys Project Summary (Detailed, ~500 lines)
+Line 001 - Project name: ExamSys.
+Line 002 - Stack: React client, Express server, MongoDB database.
+Line 003 - Purpose: Secure exam delivery, student answer submission, admin evaluation.
+Line 004 - Primary goal: Confidentiality of exam content and integrity of answers.
+Line 005 - Secondary goal: Clear admin visibility into activity and results.
+Line 006 - Core actors: Admin and Student.
+Line 007 - Admin creates exams and announces results.
+Line 008 - Student decrypts exam and submits answers.
+Line 009 - All sensitive flows use cryptographic signatures.
+Line 010 - Time-based access control protects exam release time.
+Line 011 - Server signs exam packages.
+Line 012 - Students verify packages before decrypting.
+Line 013 - Students sign their answers before sending to server.
+Line 014 - Server verifies student signatures before storing submissions.
+Line 015 - Admin re-verifies signatures during evaluation.
+Line 016 - Results are stored and displayed per student.
+Line 017 - Logs capture actions for auditing.
+Line 018 - Database stores users, packages, logs, submissions, keys, results.
+Line 019 - Client stores JWT and user role in localStorage.
+Line 020 - Client stores student private key in IndexedDB (non-extractable).
+Line 021 - Public keys are stored in MongoDB for verification.
+Line 022 - The project is organized as a monorepo.
+Line 023 - Root has client and server subdirectories.
+Line 024 - Server creates /packages to store encrypted packages.
+Line 025 - Server creates /uploads to store admin uploads temporarily.
+Line 026 - Server creates /keys for Ed25519 server keypair.
+Line 027 - Server initializes persistent Ed25519 keys if missing.
+Line 028 - Server public key is embedded into exam packages.
+Line 029 - Server private key never leaves the server.
+Line 030 - Student private key never leaves the browser.
+Line 031 - Student private key is not exportable by design.
+Line 032 - Student private key is stored in IndexedDB under a single key.
+Line 033 - Student public key is exported for signup.
+Line 034 - Server validates JWT for protected routes.
+Line 035 - Role-based access control is enforced in UI and API.
+Line 036 - Admin routes require role=admin.
+Line 037 - Student routes require role=student.
+Line 038 - Admin can access logs, submissions, and results.
+Line 039 - Student cannot access admin endpoints.
+Line 040 - JWT payload stores user id and role.
+Line 041 - On signup/login, server returns user_id for client storage.
+Line 042 - Client stores user_id for signed payloads.
+Line 043 - Decryption flow depends on exam_time and EPOCH_TIME.
+Line 044 - STEP_SIZE_SECONDS controls key evolution granularity.
+Line 045 - K0 is fixed and stored in server env.
+Line 046 - K1 = SHA256(K0).
+Line 047 - Kn = SHA256 repeated n times from K0.
+Line 048 - n is derived from (exam_time - epoch_time) / step_size.
+Line 049 - HKDF derives the AES-256-GCM key from Kn.
+Line 050 - AAD binds exam_id and exam_time to encryption.
+Line 051 - AES-GCM provides confidentiality and integrity.
+Line 052 - Server signs package payload with Ed25519.
+Line 053 - Student verifies payload signature before decrypting.
+Line 054 - Package includes ciphertext, nonce, tag, aad, and signature.
+Line 055 - Package includes public_key for signature verification.
+Line 056 - Package includes content_type to guide UI.
+Line 057 - content_type = "text" triggers quiz parsing.
+Line 058 - content_type = "file" displays PDF only.
+Line 059 - The UI does not attempt to parse PDFs.
+Line 060 - Admin can upload PDF or paste text.
+Line 061 - If paper_text exists, server stores content_type "text".
+Line 062 - If upload exists, server stores content_type "file".
+Line 063 - Server stores metadata in ExamPackage collection.
+Line 064 - ExamPackage excludes ciphertext in admin history view.
+Line 065 - Exam history includes exam_id, exam_time, version, timestamps.
+Line 066 - DecryptLog records when decryption occurs.
+Line 067 - DecryptLog includes exam_id, exam_time, decrypted_at.
+Line 068 - DecryptLog is for auditing access timing.
+Line 069 - ActionLog records system actions for admin review.
+Line 070 - ActionLog fields: action, actor, actor_role, exam_id, metadata.
+Line 071 - ActionLog uses timestamps for event ordering.
+Line 072 - ActionLog entries are created for key events.
+Line 073 - Key event: signup creates "signup" log.
+Line 074 - Key event: login creates "login" log.
+Line 075 - Key event: exam creation creates "exam_created" log.
+Line 076 - Key event: decrypt creates "exam_decrypted" log.
+Line 077 - Key event: submit creates "answers_submitted" log.
+Line 078 - Key event: results creates "results_announced" log.
+Line 079 - Logs page shows actor and metadata per event.
+Line 080 - Logs page is admin-only.
+Line 081 - Admin logs are fetched from /api/admin/logs.
+Line 082 - Logs endpoint requires JWT and admin role.
+Line 083 - Logs include actor name, email, and role.
+Line 084 - Logs include exam_id and metadata payload.
+Line 085 - Logs are sorted by most recent first.
+Line 086 - Admin UI lists logs in a table.
+Line 087 - Table shows time, action, actor, role, exam id.
+Line 088 - Table includes metadata in pretty JSON.
+Line 089 - Metadata is optional; missing metadata shows "-".
+Line 090 - Admin UI is in client/src/pages/LogsPage.js.
+Line 091 - Logs route is /admin/logs.
+Line 092 - Logs link is in the main nav.
+Line 093 - ProtectedRoute ensures only admin sees logs.
+Line 094 - Admin UI does not store logs locally.
+Line 095 - Admin UI uses fetch with Authorization header.
+Line 096 - Authorization uses Bearer auth_token.
+Line 097 - Error messages show in status banners.
+Line 098 - Successful fetch clears status.
+Line 099 - No logs shows helper message.
+Line 100 - All pages use shared styling from App.css.
+Line 101 - Client uses React Router for navigation.
+Line 102 - ProtectedRoute checks auth_token and auth_role.
+Line 103 - Unauthenticated users are redirected to /auth.
+Line 104 - Incorrect role also redirects to /auth.
+Line 105 - AuthPage handles login and signup tabs.
+Line 106 - Signup collects name, email, password, role.
+Line 107 - Student signup triggers key generation.
+Line 108 - Admin signup does not generate keys.
+Line 109 - Key generation uses WebCrypto Ed25519.
+Line 110 - Key generation creates non-extractable private key.
+Line 111 - Public key is exportable and sent to server.
+Line 112 - Private key is stored in IndexedDB.
+Line 113 - IndexedDB database name: examsys-keys.
+Line 114 - IndexedDB store name: crypto_keys.
+Line 115 - Private key record id: student_private_key.
+Line 116 - Client stores a saved_at timestamp for the key.
+Line 117 - Crypto helper is in client/src/utils/cryptoKeys.js.
+Line 118 - storeStudentPrivateKey saves CryptoKey into IndexedDB.
+Line 119 - loadStudentPrivateKey loads CryptoKey from IndexedDB.
+Line 120 - No private key is stored in localStorage.
+Line 121 - localStorage stores auth token and role only.
+Line 122 - localStorage stores auth_user_id for payload creation.
+Line 123 - localStorage stores student_public_key only if needed.
+Line 124 - Auth response includes user_id for storage.
+Line 125 - Auth response includes role for routing.
+Line 126 - Auth response includes token for API calls.
+Line 127 - Passwords are hashed with bcrypt.
+Line 128 - JWT tokens include sub and role fields.
+Line 129 - JWT expiry is 7 days.
+Line 130 - Server uses JWT_SECRET env for signing.
+Line 131 - Server uses dotenv to read env values.
+Line 132 - Server connects to MongoDB with dbName exam_system.
+Line 133 - MONGO_URI is required for server startup.
+Line 134 - Server fails fast if MONGO_URI is missing.
+Line 135 - Server runs on configured PORT or default.
+Line 136 - Server uses CORS and JSON middleware.
+Line 137 - multer handles uploads for admin exam creation.
+Line 138 - Uploaded files are stored with safe filenames.
+Line 139 - Exam packages are saved to /packages.
+Line 140 - Package filename is exam_id + "_exam_package.enc".
+Line 141 - Package includes payload, signature, and server public key.
+Line 142 - Packages are JSON files, not binary blobs.
+Line 143 - Student fetches package via GET /api/student/packages/:examId.
+Line 144 - Student decrypts using AES-GCM with derived key.
+Line 145 - Student checks exam_time before decrypting.
+Line 146 - Student can only decrypt at or after exam_time.
+Line 147 - Student denies access if time is invalid.
+Line 148 - Student logs decryption via /api/student/decrypt-log.
+Line 149 - Decrypt log includes exam_id and exam_time.
+Line 150 - Decrypt log is also mirrored in ActionLog.
+Line 151 - Student UI sets status messages on each step.
+Line 152 - Student UI clears previous results on new fetch.
+Line 153 - Student UI resets quiz state between exams.
+Line 154 - Student UI clears answers on re-fetch.
+Line 155 - Student UI clears PDF URL when new exam starts.
+Line 156 - Student UI is in client/src/pages/StudentPage.js.
+Line 157 - Student UI displays PDF in an iframe.
+Line 158 - Student UI displays plain text in a textarea.
+Line 159 - Text content triggers quiz parsing when content_type="text".
+Line 160 - parseQuestions uses regex for numbered questions.
+Line 161 - Each question expects A) B) C) D) options.
+Line 162 - parseQuestions normalizes whitespace.
+Line 163 - parseQuestions returns {id, question, options}.
+Line 164 - quizActive controls running state.
+Line 165 - quizFinished indicates quiz has ended.
+Line 166 - Global timer is total questions * 60 seconds.
+Line 167 - Per-question timer counts down from 60 seconds.
+Line 168 - When timeLeft hits 0, it auto-advances.
+Line 169 - Student can manually press Next.
+Line 170 - Next resets timeLeft to 60.
+Line 171 - Answers are stored by question id and option index.
+Line 172 - Answers are normalized before signing.
+Line 173 - normalizeAnswers sorts question ids ascending.
+Line 174 - Student payload includes exam_id, student_id, answers, timestamp.
+Line 175 - timestamp is ISO string at submission time.
+Line 176 - canonicalizePayload ensures stable ordering.
+Line 177 - canonicalized payload is signed, not raw input.
+Line 178 - Student uses Ed25519 sign with private CryptoKey.
+Line 179 - Signature is Base64 encoded for transport.
+Line 180 - Student sends {payload, signature} to server.
+Line 181 - Student uses Authorization Bearer token.
+Line 182 - Student shows "Submitting..." on send.
+Line 183 - Student shows success message on verified submission.
+Line 184 - Student shows error message on failure.
+Line 185 - Server endpoint: POST /api/student/submit-answers.
+Line 186 - Server requires JWT and role student.
+Line 187 - Server validates payload structure.
+Line 188 - Server ensures payload.student_id matches JWT sub.
+Line 189 - Server validates payload.timestamp is valid date.
+Line 190 - Server canonicalizes payload before verification.
+Line 191 - Server uses stored student public_key to verify.
+Line 192 - Server rejects if signature verification fails.
+Line 193 - Server stores AnswerSubmission on success.
+Line 194 - AnswerSubmission stores payload and answers.
+Line 195 - AnswerSubmission stores signature and verified flag.
+Line 196 - AnswerSubmission stores submitted_at from payload timestamp.
+Line 197 - AnswerSubmission stores student_id string.
+Line 198 - AnswerSubmission links to User by ObjectId.
+Line 199 - AnswerSubmission collection name: submissions.
+Line 200 - AnswerSubmission documents are timestamped.
+Line 201 - Server logs submission in ActionLog.
+Line 202 - Admin can view submissions via /api/admin/submissions.
+Line 203 - Submissions endpoint is admin-only.
+Line 204 - Submissions return student name and email.
+Line 205 - Submissions include payload and answers.
+Line 206 - Submissions include verified flag.
+Line 207 - Submissions are ordered by submitted_at.
+Line 208 - Admin UI shows submissions in AdminPage.
+Line 209 - Admin UI shows answers as formatted JSON.
+Line 210 - Admin page is /admin.
+Line 211 - Admin page also shows exam history.
+Line 212 - Admin page contains exam creation form.
+Line 213 - Admin can upload PDF or paste text.
+Line 214 - Admin can reset the form with a button.
+Line 215 - Admin sees status for package creation.
+Line 216 - Admin exam history is loaded on mount.
+Line 217 - Admin submissions are loaded on mount.
+Line 218 - Admin page uses same status styles.
+Line 219 - Results announce page is /admin/results.
+Line 220 - Results page is admin-only.
+Line 221 - Results page accepts exam_id input.
+Line 222 - Results page accepts correct answers JSON.
+Line 223 - Results page validates JSON client-side.
+Line 224 - Results page sends POST /api/admin/results/announce.
+Line 225 - Results request uses Authorization header.
+Line 226 - Server stores correct answers in AnswerKey.
+Line 227 - AnswerKey collection name: answer_keys.
+Line 228 - AnswerKey is keyed by exam_id with unique index.
+Line 229 - AnswerKey fields: exam_id, correct_answers.
+Line 230 - Server fetches submissions by exam_id.
+Line 231 - Server re-verifies each submission signature.
+Line 232 - Re-verification uses stored public_key.
+Line 233 - Verification uses the canonicalized payload.
+Line 234 - If verification fails, score stays 0.
+Line 235 - If verification passes, score is computed.
+Line 236 - Score is count of correct answers.
+Line 237 - Total is number of questions in answer key.
+Line 238 - Percentage is score/total * 100 rounded.
+Line 239 - Server stores ExamResult for each student.
+Line 240 - ExamResult collection name: exam_results.
+Line 241 - ExamResult includes exam_id, student, score, total.
+Line 242 - ExamResult includes percentage and verified.
+Line 243 - ExamResult includes evaluated_at timestamp.
+Line 244 - ExamResult links to AnswerSubmission.
+Line 245 - Results are returned to client for display.
+Line 246 - Results include verified flag per student.
+Line 247 - Results include submitted_at time.
+Line 248 - Results page renders table of results.
+Line 249 - Results page shows score and percentage.
+Line 250 - Results page shows verification status.
+Line 251 - Results page shows student name and email.
+Line 252 - Results page shows exam_id per row.
+Line 253 - Results page shows submission time.
+Line 254 - Results page displays helper text when empty.
+Line 255 - Results page displays errors in status box.
+Line 256 - Results page uses consistent form styling.
+Line 257 - Server logs results_announced action.
+Line 258 - Action log metadata includes submissions count.
+Line 259 - Action log metadata includes total_questions.
+Line 260 - Server uses requireAdmin for admin-only endpoints.
+Line 261 - requireAdmin checks req.user.role.
+Line 262 - authenticate middleware checks JWT Bearer token.
+Line 263 - Invalid tokens return 401.
+Line 264 - Non-admin access returns 403.
+Line 265 - Admin logs, results, submissions are protected.
+Line 266 - Student decrypt log endpoint is open but controlled by data.
+Line 267 - Exam package fetch is open for students.
+Line 268 - Security relies on signature verification and timing.
+Line 269 - If package signature fails, decryption stops.
+Line 270 - If exam time is in the future, decryption stops.
+Line 271 - If n < 1, access is denied.
+Line 272 - Student cannot forge answers without private key.
+Line 273 - Server verifies student signature every time.
+Line 274 - Evaluation re-verifies signatures again.
+Line 275 - Double verification reduces tampering risk.
+Line 276 - Admin can review logs to audit activity.
+Line 277 - Admin can review submissions directly.
+Line 278 - Admin can recompute results at any time.
+Line 279 - AnswerKey is stored for repeatable grading.
+Line 280 - ExamResult persists final scores for record.
+Line 281 - Data normalization ensures stable signing.
+Line 282 - Canonical payload ensures signature stability.
+Line 283 - Canonical payload order: exam_id, student_id, answers, timestamp.
+Line 284 - Answers are sorted by numeric question id.
+Line 285 - All signatures are Ed25519.
+Line 286 - Ed25519 is used in Node and in WebCrypto.
+Line 287 - Server uses crypto.sign and crypto.verify.
+Line 288 - Client uses crypto.subtle.sign and verify.
+Line 289 - Server public key is PEM for exam packages.
+Line 290 - Student public key is base64 DER in DB.
+Line 291 - Server builds public key from base64 DER.
+Line 292 - Student payload uses string student_id.
+Line 293 - student_id is the Mongo ObjectId string.
+Line 294 - Auth response returns user_id for use in payload.
+Line 295 - Student must be logged in to submit answers.
+Line 296 - Student submission fails if auth_user_id missing.
+Line 297 - Student submission fails if key not found in IndexedDB.
+Line 298 - Student submission fails if payload invalid.
+Line 299 - Student submission fails if signature verification fails.
+Line 300 - Student submission success returns submission id.
+Line 301 - Server logs include submission id in metadata.
+Line 302 - Admin can trace submission from logs.
+Line 303 - Admin can see exam_id of each submission.
+Line 304 - Admin can see verified status for each submission.
+Line 305 - Admin can see raw answers in submissions list.
+Line 306 - Admin can track timeline via logs.
+Line 307 - ActionLog is ordered by createdAt descending.
+Line 308 - Logs UI formats time using locale string.
+Line 309 - Submissions UI formats answers in preformatted JSON.
+Line 310 - Results UI formats percentage as integer percent.
+Line 311 - Student UI displays quiz stats: answered count, time.
+Line 312 - Student UI displays global time and question time.
+Line 313 - Student UI shows current question number.
+Line 314 - Student UI uses radio inputs for options.
+Line 315 - Student UI stores selection in state.
+Line 316 - Student UI prevents submission without exam_id.
+Line 317 - Student UI handles PDF display for file content.
+Line 318 - Student UI handles plain text display for non-quiz text.
+Line 319 - Student UI uses status messages for errors.
+Line 320 - Student UI includes helper text under fields.
+Line 321 - Admin UI uses table styles from App.css.
+Line 322 - Admin UI includes two tables: history and submissions.
+Line 323 - Admin UI can be extended with pagination if needed.
+Line 324 - The system currently uses in-memory state on client.
+Line 325 - The server uses MongoDB for persistence.
+Line 326 - The system assumes MongoDB is reachable.
+Line 327 - Server stops if it cannot connect to MongoDB.
+Line 328 - Environment variables are required in .env.
+Line 329 - MONGO_URI must point to the database.
+Line 330 - JWT_SECRET should be strong.
+Line 331 - EPOCH_TIME controls initial time reference.
+Line 332 - STEP_SIZE_SECONDS controls time window size.
+Line 333 - K0_HEX must be 64 hex characters.
+Line 334 - K0_HEX must decode to 32 bytes.
+Line 335 - Server validates K0_HEX length at startup.
+Line 336 - Client uses REACT_APP_EPOCH_TIME for time.
+Line 337 - Client uses REACT_APP_STEP_SIZE_SECONDS for time.
+Line 338 - Client and server must align on epoch and step.
+Line 339 - Package verification uses JSON.stringify for payload.
+Line 340 - Payload includes content_type when present.
+Line 341 - Student verifies signature over payload fields only.
+Line 342 - Server signs package payload before storing.
+Line 343 - Package includes version field for evolution.
+Line 344 - Admin history shows package version.
+Line 345 - Multipart upload uses multer field names file or paper.
+Line 346 - Admin UI sends file in "file" form field.
+Line 347 - Admin UI sends paper_text in "paper_text".
+Line 348 - Server expects exam_id and exam_time in form.
+Line 349 - Server validates exam_time is valid.
+Line 350 - Server rejects if exam_time before epoch.
+Line 351 - Server generates nonce for AES-GCM.
+Line 352 - Server sets AAD before encryption.
+Line 353 - Server attaches auth tag to ciphertext.
+Line 354 - Student reconstructs ciphertext + tag for decrypt.
+Line 355 - Student uses AES-GCM with aad and iv.
+Line 356 - Decryption yields binary bytes.
+Line 357 - Student detects PDF via magic bytes.
+Line 358 - Student checks first four bytes for "%PDF".
+Line 359 - PDF is shown in iframe using blob URL.
+Line 360 - Text is decoded via TextDecoder.
+Line 361 - If no quiz questions found, error is shown.
+Line 362 - Quiz is only started if parsedQuestions length > 0.
+Line 363 - Quiz status message shows "Quiz started".
+Line 364 - Student can only submit after quiz ends.
+Line 365 - Submit button appears after quizFinished.
+Line 366 - Submit button is disabled during submit.
+Line 367 - Submission status is shown below the button.
+Line 368 - Client uses consistent button classes.
+Line 369 - Client uses consistent field classes.
+Line 370 - App.css defines layout and card styles.
+Line 371 - App.css defines table styles.
+Line 372 - App.css defines quiz styles.
+Line 373 - App.css defines nav styles.
+Line 374 - Navigation includes Auth, Admin, Logs, Results, Student.
+Line 375 - Logs and Results routes are admin-only.
+Line 376 - Student route is student-only.
+Line 377 - Auth route is open.
+Line 378 - Default route redirects to /auth.
+Line 379 - Server endpoints are grouped by role.
+Line 380 - /api/auth/* for login and signup.
+Line 381 - /api/admin/* for admin actions.
+Line 382 - /api/student/* for student actions.
+Line 383 - Admin endpoints always require JWT.
+Line 384 - Student submission endpoint requires JWT.
+Line 385 - Student package fetch does not require JWT.
+Line 386 - The package itself is protected by time and signature.
+Line 387 - Decrypt log endpoint does not require JWT.
+Line 388 - Logs do not include private keys.
+Line 389 - Logs do not include passwords.
+Line 390 - No private key is stored on server.
+Line 391 - All private keys remain on their origin.
+Line 392 - Server keypair remains in /server/keys.
+Line 393 - Student keypair remains in browser storage.
+Line 394 - Server uses Node crypto for Ed25519.
+Line 395 - Client uses WebCrypto for Ed25519.
+Line 396 - WebCrypto Ed25519 is supported in modern browsers.
+Line 397 - If WebCrypto unavailable, flows fail gracefully.
+Line 398 - Student sees "WebCrypto is not available".
+Line 399 - Signup fails if key generation fails.
+Line 400 - Decrypt fails if signature is invalid.
+Line 401 - Decrypt fails if exam time is invalid.
+Line 402 - Submission fails if key missing.
+Line 403 - Results evaluation skips scoring if verification fails.
+Line 404 - Verified flag is reflected in results table.
+Line 405 - Verified flag helps detect tampering.
+Line 406 - Admin can see "verified: No" for invalid submissions.
+Line 407 - ExamResult stores verified status for records.
+Line 408 - AnswerKey provides consistent grading baseline.
+Line 409 - AnswerKey can be updated by re-announcing results.
+Line 410 - Re-announcing results overwrites answer key.
+Line 411 - Re-announcing results recomputes scores.
+Line 412 - Re-announcing results updates ExamResult docs.
+Line 413 - Submission payload is kept to preserve signable data.
+Line 414 - Payload includes timestamp for auditability.
+Line 415 - Payload timestamp is used as submitted_at.
+Line 416 - Server preserves payload for future verification.
+Line 417 - Student ID is stored redundantly for convenience.
+Line 418 - Student ID in payload is checked against JWT.
+Line 419 - This prevents impersonation with stolen token.
+Line 420 - All JSON payloads are validated with checks.
+Line 421 - Invalid data returns 400 with message.
+Line 422 - Server errors return 500 with message.
+Line 423 - Server logs errors to console.
+Line 424 - Client shows friendly error messages.
+Line 425 - Admin UI auto-loads on page load.
+Line 426 - Logs UI auto-loads on page load.
+Line 427 - Results UI fetches on submit.
+Line 428 - Student UI fetches on form submit.
+Line 429 - All fetch calls use relative /api paths.
+Line 430 - Client proxy points to server port.
+Line 431 - Default server port was set to avoid conflicts.
+Line 432 - The system supports RESTful communication.
+Line 433 - The system avoids storing plaintext exams in DB.
+Line 434 - Exams are stored encrypted in /packages and metadata in DB.
+Line 435 - Admin history does not expose ciphertext.
+Line 436 - Security is layered: encryption + signatures + timing.
+Line 437 - The codebase follows consistent formatting conventions.
+Line 438 - Components are kept in /client/src/pages.
+Line 439 - Utilities are placed in /client/src/utils.
+Line 440 - Mongoose models are in /server/src/models.
+Line 441 - Express routes are defined in /server/src/index.js.
+Line 442 - The system is extensible for more roles if needed.
+Line 443 - The system can add grading policies later.
+Line 444 - The system can add per-question weights later.
+Line 445 - The system can add CSV export later.
+Line 446 - The system can add admin result publishing later.
+Line 447 - The system can add student result viewing later.
+Line 448 - The system can add offline encryption later.
+Line 449 - The system is structured for further features.
+Line 450 - Build and test scripts are minimal.
+Line 451 - Root package.json includes npm run server and client.
+Line 452 - npm run server runs server dev script.
+Line 453 - npm run client runs React dev server.
+Line 454 - No tests are defined in root scripts.
+Line 455 - The project compiles with CRA defaults.
+Line 456 - The project uses ESLint defaults from CRA.
+Line 457 - The project uses React hooks and function components.
+Line 458 - The project uses fetch for HTTP calls.
+Line 459 - The project uses FormData for file upload.
+Line 460 - The project uses JSON for most API payloads.
+Line 461 - The project uses JSON.stringify for canonical signing.
+Line 462 - The project uses base64 for signature transport.
+Line 463 - The project uses buffer conversions on client.
+Line 464 - The project uses PEM and DER conversions on server.
+Line 465 - The project uses safe filename sanitization for uploads.
+Line 466 - The project uses defensive checks on input.
+Line 467 - The project avoids silent failures.
+Line 468 - The project shows explicit error messages.
+Line 469 - The project prioritizes security over convenience.
+Line 470 - The project fulfills the full required flow.
+Line 471 - Student signs payload and server verifies.
+Line 472 - Server stores submissions with signature and payload.
+Line 473 - Admin announces results using correct answers.
+Line 474 - Server re-verifies signatures during grading.
+Line 475 - Results are stored and returned.
+Line 476 - Admin sees results per student.
+Line 477 - Logs provide traceability.
+Line 478 - Submissions provide raw audit record.
+Line 479 - Answer keys provide grading source of truth.
+Line 480 - Exam results provide final marks.
+Line 481 - The system is ready for real-world demo usage.
+Line 482 - The system uses WebCrypto best practices for keys.
+Line 483 - The system avoids exporting private keys.
+Line 484 - The system uses IndexedDB for private key storage.
+Line 485 - The system uses JWT for session integrity.
+Line 486 - The system uses role guards in UI and API.
+Line 487 - The system uses strict verification steps.
+Line 488 - The system uses explicit error handling.
+Line 489 - The system uses consistent UI for tables and forms.
+Line 490 - The system provides an end-to-end secure exam flow.
+Line 491 - The system provides admin observability and control.
+Line 492 - The system provides student integrity verification.
+Line 493 - The system provides secure package delivery.
+Line 494 - The system provides deterministic grading.
+Line 495 - The system provides actionable logs.
+Line 496 - The system is modular and extensible.
+Line 497 - The system matches the requested features.
+Line 498 - The system enforces the cryptographic workflow.
+Line 499 - The system meets all current requirements.
+Line 500 - End of summary.

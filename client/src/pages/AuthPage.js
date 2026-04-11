@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { storeStudentPrivateKey } from "../utils/cryptoKeys";
 
 const bufferToBase64 = (buffer) => {
   const bytes = new Uint8Array(buffer);
@@ -16,15 +17,12 @@ const generateStudentKeys = async () => {
   }
   const keyPair = await window.crypto.subtle.generateKey(
     { name: "Ed25519" },
-    true,
+    false,
     ["sign", "verify"]
   );
   const publicKey = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
-  const privateKey = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
   const publicKeyBase64 = bufferToBase64(publicKey);
-  const privateKeyBase64 = bufferToBase64(privateKey);
-  localStorage.setItem("student_private_key", privateKeyBase64);
-  localStorage.setItem("student_public_key", publicKeyBase64);
+  await storeStudentPrivateKey(keyPair.privateKey);
   return publicKeyBase64;
 };
 

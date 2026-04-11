@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { loadStudentPrivateKey } from "../utils/cryptoKeys";
 
 const EPOCH_TIME = process.env.REACT_APP_EPOCH_TIME || "2025-01-01T00:00:00Z";
 const STEP_SIZE_SECONDS = Number(process.env.REACT_APP_STEP_SIZE_SECONDS || "300");
@@ -369,8 +370,8 @@ function StudentPage() {
       return;
     }
 
-    const privateKeyBase64 = localStorage.getItem("student_private_key");
-    if (!privateKeyBase64) {
+    const privateKey = await loadStudentPrivateKey();
+    if (!privateKey) {
       setSubmissionStatus("Private key not found in this browser.");
       setSubmissionError(true);
       return;
@@ -390,14 +391,6 @@ function StudentPage() {
         throw new Error("Invalid submission payload.");
       }
       const message = canonicalized.message;
-      const keyBytes = base64ToBytes(privateKeyBase64);
-      const privateKey = await crypto.subtle.importKey(
-        "pkcs8",
-        keyBytes.buffer,
-        { name: "Ed25519" },
-        false,
-        ["sign"]
-      );
       const signature = await crypto.subtle.sign(
         { name: "Ed25519" },
         privateKey,
